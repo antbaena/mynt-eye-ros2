@@ -1,0 +1,64 @@
+mynteye_camera_node:
+  ros__parameters:
+    backend: uvc
+    video_device: ""
+    width: 1280
+    height: 480
+    fps: 25
+    device_wait_sec: 15
+
+    split_stereo: true
+    uvc_stereo_layout: auto
+    swap_stereo: false
+
+    enable_depth: true
+    publish_pointcloud: true
+    publish_debug_images: true
+    publish_rectified_images: true
+    rectify_stereo: true
+    calibration_preset: sdk_default
+
+    stereo_preprocess: true
+    clahe_clip_limit: 2.0
+    clahe_tile_grid_size: 8
+
+    baseline_m: 0.12
+    fx: 0.0
+    fy: 0.0
+    cx: 0.0
+    cy: 0.0
+    horizontal_fov_deg: 90.0
+    min_depth_m: 0.20
+    max_depth_m: 10.0
+
+    stereo_matcher: sgbm
+    min_disparity: 0
+    num_disparities: 128
+    block_size: 0
+    uniqueness_ratio: 0
+    speckle_window_size: 100
+    speckle_range: 0
+    disp12_max_diff: 1
+    pre_filter_cap: 0
+    bm_pre_filter_size: 9
+    bm_texture_threshold: 10
+    disparity_median_kernel: 3
+    depth_cleanup_kernel: 0
+    depth_min_component_area: 20
+    depth_image_encoding: 16UC1
+    enable_lr_check: false
+    lr_check_tolerance_px: 3.0
+
+    pointcloud_stride: 2
+    pointcloud_ros_coordinates: true
+
+    publish_tf: true
+    base_frame: mynteye_link
+    base_at_stereo_center: true
+    left_frame: mynteye_left
+    right_frame: mynteye_right
+    points_frame: mynteye_points
+    imu_frame: mynteye_imu
+    imu_x_m: 0.0
+    imu_y_m: 0.0
+    imu_z_m: 0.0
