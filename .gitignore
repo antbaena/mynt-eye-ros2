@@ -1,0 +1,45 @@
+# ROS 2 / colcon
+build/
+install/
+log/
+mynteye_ws/build/
+mynteye_ws/install/
+mynteye_ws/log/
+
+# External SDK source/build trees. Fetch with scripts/build_legacy_sdk_ubuntu24.sh.
+MYNT-EYE-S-SDK/
+mynt-eye-s-sdk/
+third_party/
+
+# Python/cache artifacts
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# CMake/build artifacts
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.o
+*.so
+*.a
+
+# ROS data captures and generated logs
+*.bag
+*.db3
+*.mcap
+*.log
+
+# Editors and local machine state
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
