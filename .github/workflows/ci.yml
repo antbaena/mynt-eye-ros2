@@ -1,0 +1,38 @@
+name: ROS 2 Jazzy CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup ROS 2 Jazzy
+        uses: ros-tooling/setup-ros@v0.7
+        with:
+          required-ros-distributions: jazzy
+
+      - name: Install system dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            build-essential cmake pkg-config git \
+            libopencv-dev libboost-filesystem-dev libpcl-dev v4l-utils \
+            ros-jazzy-cv-bridge ros-jazzy-image-transport \
+            ros-jazzy-tf2 ros-jazzy-tf2-ros
+
+      - name: Build legacy MYNT EYE SDK
+        run: ./scripts/build_legacy_sdk_ubuntu24.sh
+
+      - name: Build ROS 2 package
+        shell: bash
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          cd mynteye_ws
+          colcon build --event-handlers console_direct+ --packages-select mynteye_camera --cmake-args -DPython3_EXECUTABLE=/usr/bin/python3

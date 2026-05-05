@@ -1,0 +1,40 @@
+name: Bug report
+description: Report a camera, build, launch or depth problem
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened?
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS and ROS version
+      placeholder: Ubuntu 24.04, ROS 2 Jazzy
+    validations:
+      required: true
+  - type: input
+    id: usb
+    attributes:
+      label: USB ID
+      placeholder: output of lsusb, e.g. 1e4e:0120
+  - type: textarea
+    id: v4l2
+    attributes:
+      label: V4L2 formats
+      description: Paste `v4l2-ctl --list-formats-ext -d /dev/video0` if relevant.
+      render: text
+  - type: textarea
+    id: launch
+    attributes:
+      label: Launch command and logs
+      render: shell
+  - type: textarea
+    id: topics
+    attributes:
+      label: ROS topics observed
+      description: Include `ros2 topic list`, relevant `ros2 topic hz`, or screenshots if useful.
