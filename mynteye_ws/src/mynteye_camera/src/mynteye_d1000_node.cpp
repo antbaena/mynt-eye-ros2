@@ -68,6 +68,10 @@ public:
     declare_parameter<std::string>("left_frame_id",  "mynteye_left");
     declare_parameter<std::string>("right_frame_id", "mynteye_right");
     declare_parameter<std::string>("depth_frame_id", "mynteye_depth");
+    // D1000 working range: 0.32 m – 7.0 m. Values outside this range
+    // come from noise or reflections and should not be used for mapping.
+    declare_parameter<double>("min_depth_m", 0.32);
+    declare_parameter<double>("max_depth_m", 7.0);
 
     dev_index_    = get_parameter("dev_index").as_int();
     framerate_    = get_parameter("framerate").as_int();
@@ -78,11 +82,16 @@ public:
     left_frame_id_  = get_parameter("left_frame_id").as_string();
     right_frame_id_ = get_parameter("right_frame_id").as_string();
     depth_frame_id_ = get_parameter("depth_frame_id").as_string();
+    min_depth_mm_ = static_cast<uint16_t>(get_parameter("min_depth_m").as_double() * 1000.0);
+    max_depth_mm_ = static_cast<uint16_t>(get_parameter("max_depth_m").as_double() * 1000.0);
 
     // ---- Publishers --------------------------------------------------------
     pub_left_   = create_publisher<sensor_msgs::msg::Image>("left/image_raw", 5);
     pub_right_  = create_publisher<sensor_msgs::msg::Image>("right/image_raw", 5);
     pub_depth_  = create_publisher<sensor_msgs::msg::Image>("depth/image_raw", 5);
+    // depth/image_visual: 8UC1 image scaled to [0,255] within the working range;
+    // useful for RViz visualization without manual range configuration.
+    pub_depth_vis_ = create_publisher<sensor_msgs::msg::Image>("depth/image_visual", 5);
     pub_left_info_  = create_publisher<sensor_msgs::msg::CameraInfo>("left/camera_info", 5);
     pub_right_info_ = create_publisher<sensor_msgs::msg::CameraInfo>("right/camera_info", 5);
     pub_depth_info_ = create_publisher<sensor_msgs::msg::CameraInfo>("depth/camera_info", 5);
@@ -241,13 +250,62 @@ private:
   // --------------------------------------------------------------------------
   void PublishDepth(const StreamData & data, const rclcpp::Time & stamp)
   {
-    // DEPTH_RAW = IMAGE_GRAY_16 = 16-bit unsigned, values in mm
+    // DEPTH_RAW = IMAGE_GRAY_16 (aliased in D-SDK types.h) = 16UC1, values in mm.
+    // The D1000 eSPDI chip outputs 14-bit Z values (0–16383 mm). The working range
+    // is 320–7000 mm; values outside this range are noise/reflections.
     cv::Mat depth16 = data.img->To(ImageFormat::DEPTH_RAW)->ToMat();
 
+    // Diagnostic: log depth stats once at startup
+    if (!depth_stats_logged_) {
+      depth_stats_logged_ = true;
+      uint16_t dmin = 65535, dmax = 0;
+      size_t valid = 0;
+      for (int r = 0; r < depth16.rows; ++r) {
+        const uint16_t * p = depth16.ptr<uint16_t>(r);
+        for (int c = 0; c < depth16.cols; ++c) {
+          uint16_t v = p[c];
+          if (v == 0) { continue; }
+          if (v < dmin) { dmin = v; }
+          if (v > dmax) { dmax = v; }
+          ++valid;
+        }
+      }
+      RCLCPP_INFO(get_logger(),
+        "First depth frame: %dx%d, valid=%zu/%d, range=[%u,%u] mm",
+        depth16.cols, depth16.rows,
+        valid, depth16.rows * depth16.cols,
+        dmin, dmax);
+    }
+
+    // Publish raw 16UC1 mm depth (for algorithms, slam, etc.)
     auto msg = cv_bridge::CvImage(std_msgs::msg::Header(), "16UC1", depth16).toImageMsg();
     msg->header.stamp = stamp;
     msg->header.frame_id = depth_frame_id_;
     pub_depth_->publish(*msg);
+
+    // Publish 8UC1 visualization image scaled within working range:
+    //   pixel = clamp(d, min_mm, max_mm) mapped to [0, 255].
+    //   d==0 → 0 (black = no data).  Useful to visualize in RViz directly.
+    if (pub_depth_vis_->get_subscription_count() > 0) {
+      cv::Mat vis(depth16.rows, depth16.cols, CV_8UC1);
+      const float scale = 255.0f / static_cast<float>(max_depth_mm_ - min_depth_mm_);
+      for (int r = 0; r < depth16.rows; ++r) {
+        const uint16_t * src = depth16.ptr<uint16_t>(r);
+        uint8_t * dst = vis.ptr<uint8_t>(r);
+        for (int c = 0; c < depth16.cols; ++c) {
+          uint16_t d = src[c];
+          if (d == 0 || d < min_depth_mm_ || d > max_depth_mm_) {
+            dst[c] = 0;
+          } else {
+            dst[c] = static_cast<uint8_t>((d - min_depth_mm_) * scale);
+          }
+        }
+      }
+      auto vis_msg = cv_bridge::CvImage(std_msgs::msg::Header(), "mono8", vis).toImageMsg();
+      vis_msg->header.stamp = stamp;
+      vis_msg->header.frame_id = depth_frame_id_;
+      pub_depth_vis_->publish(*vis_msg);
+    }
 
     // CameraInfo for depth (same intrinsics as left — depth is registered to left)
     auto info = BuildCameraInfo(intrinsics_.left, depth_frame_id_, stamp);
@@ -259,11 +317,11 @@ private:
 
   // --------------------------------------------------------------------------
   // Build PointCloud2 from 16UC1 depth (mm) using left camera intrinsics.
-  // Convention matches the official D-SDK wrapper:
+  // D-SDK DEPTH_RAW (= IMAGE_GRAY_16) carries 14-bit Z in mm (0–16383).
   //   z = depth_mm / 1000.0  (meters)
   //   x = (col - cx) * z / fx
   //   y = (row - cy) * z / fy
-  //   invalid pixels: d == 0 || d == 4096
+  // Only pixels within [min_depth_m, max_depth_m] (camera working range) are kept.
   void PublishPointCloud(const cv::Mat & depth16, const rclcpp::Time & stamp)
   {
     if (pub_cloud_->get_subscription_count() == 0) { return; }
@@ -291,7 +349,8 @@ private:
       const uint16_t * row_ptr = depth16.ptr<uint16_t>(row);
       for (int col = 0; col < depth16.cols; ++col) {
         uint16_t d = row_ptr[col];
-        if (d == 0 || d == 4096) { continue; }
+        // Skip: no-data (0), out of physical working range, or eSPDI invalid marker (4096)
+        if (d == 0 || d == 4096 || d < min_depth_mm_ || d > max_depth_mm_) { continue; }
         float z = d / 1000.0f;
         float x = static_cast<float>((col - cx) * z / fx);
         float y = static_cast<float>((row - cy) * z / fy);
@@ -424,6 +483,7 @@ private:
   rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr      pub_left_;
   rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr      pub_right_;
   rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr      pub_depth_;
+  rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr      pub_depth_vis_;
   rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr pub_left_info_;
   rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr pub_right_info_;
   rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr pub_depth_info_;
@@ -439,10 +499,13 @@ private:
   std::string left_frame_id_;
   std::string right_frame_id_;
   std::string depth_frame_id_;
+  uint16_t    min_depth_mm_{320};   // 0.32 m — minimum working distance
+  uint16_t    max_depth_mm_{7000};  // 7.00 m — maximum working distance
 
   StreamIntrinsics  intrinsics_{};
   StreamExtrinsics  extrinsics_{};
   bool              calib_ok_{false};
+  bool              depth_stats_logged_{false};
 };
 
 }  // namespace mynteye_d1000
