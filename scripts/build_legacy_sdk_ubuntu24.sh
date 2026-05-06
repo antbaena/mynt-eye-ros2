@@ -51,7 +51,7 @@ replace_once(
 replace_once(
     "CMakeLists.txt",
     "      src/mynteye/api/processor/rectify_processor.cc\n",
-    "      # Disabled for OpenCV 4 / Ubuntu 24.04. S1030 uses the PINHOLE OCV rectifier.\n"
+    "      # Disabled for OpenCV 4 / Ubuntu 24.04. D1000/S1030-IR use the PINHOLE OCV rectifier.\n"
     "      # src/mynteye/api/processor/rectify_processor.cc\n",
 )
 replace_once(
@@ -62,14 +62,14 @@ replace_once(
 replace_once(
     "cmake/Option.cmake",
     "  if(WITH_OPENCV4)\n    set(WITH_CAM_MODELS OFF)\n  endif()",
-    "  if(WITH_OPENCV4)\n    # Keep camera models enabled for S1030 depth/points processors on OpenCV 4.\n    # set(WITH_CAM_MODELS OFF)\n  endif()",
+    "  if(WITH_OPENCV4)\n    # Keep camera models enabled for D1000/S1030-IR depth/points processors on OpenCV 4.\n    # set(WITH_CAM_MODELS OFF)\n  endif()",
 )
 replace_once(
     "src/mynteye/uvc/uvc.h",
     "#define MYNTEYE_PID 0x00F9\n",
     "#define MYNTEYE_PID 0x00F9\n\n"
     "#define MYNTEYE_VID_CUBETERNET 0x1E4E\n"
-    "#define MYNTEYE_PID_S1030 0x0120\n",
+    "#define MYNTEYE_PID_D1000 0x0120  // D1000 tested; S1030-IR PID TBD\n",
 )
 replace_once(
     "src/mynteye/device/context.cc",
@@ -77,7 +77,7 @@ replace_once(
     "MYNTEYE_BEGIN_NAMESPACE\n\nnamespace {\n\n"
     "bool is_mynteye_device(int vid, int pid) {\n"
     "  return (vid == MYNTEYE_VID) ||\n"
-    "      (vid == MYNTEYE_VID_CUBETERNET && pid == MYNTEYE_PID_S1030);\n"
+    "      (vid == MYNTEYE_VID_CUBETERNET && pid == MYNTEYE_PID_D1000);\n"
     "}\n\n"
     "}  // namespace\n\nContext::Context()",
 )

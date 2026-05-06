@@ -1,6 +1,6 @@
-# MYNT EYE S1030 / S2100 / S210A udev rules
+# MYNT EYE D1000 / S1030-IR / S2100 udev rules
 # Allows non-root access to the camera over USB.
-# The tested S1030/D1000 path enumerates with 1e4e:0120 and the IMU with
+# The tested D1000 path enumerates with 1e4e:0120 and the IMU with
 # 0483:5720. Older units may use the legacy Slightech/Cypress IDs.
 
 SUBSYSTEMS=="usb", ATTRS{idVendor}=="04b4", MODE="0666", GROUP="video"

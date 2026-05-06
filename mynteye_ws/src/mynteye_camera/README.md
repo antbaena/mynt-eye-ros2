@@ -1,6 +1,6 @@
 # mynteye_camera
 
-ROS 2 Jazzy driver for the legacy MYNT EYE S1030/D1000 stereo IR depth camera.
+ROS 2 Jazzy driver for the MYNT EYE D1000 stereo IR depth camera. S1030-IR support is planned.
 
 The node uses the camera's UVC/V4L2 stereo stream by default and keeps the old MYNT-EYE-S-SDK as a build dependency/reference. This avoids the fragile SDK streaming path on Ubuntu 24.04 while preserving the official depth/disparity behavior where it matters.
 
@@ -9,7 +9,7 @@ The node uses the camera's UVC/V4L2 stereo stream by default and keeps the old M
 - Ubuntu 24.04
 - ROS 2 Jazzy
 - OpenCV 4 from the system/ROS installation
-- MYNT EYE S1030/D1000-like device exposing `1e4e:0120`
+- MYNT EYE D1000 exposing `1e4e:0120` (S1030-IR support planned)
 - Working stereo UVC mode: `1280x480 YUYV`, split into two `640x480` mono IR images
 
 ## Build
@@ -87,7 +87,7 @@ See [docs/DEPTH_TUNING.md](docs/DEPTH_TUNING.md) for tuning presets and debuggin
 
 ## Calibration
 
-`calibration_preset:=sdk_default` uses the legacy SDK's bundled D1000/S1030 pinhole intrinsics and extrinsics, scaled to the active UVC image size. It is good enough for live visualization, but camera-specific stereo calibration is required for measurements.
+`calibration_preset:=sdk_default` uses the legacy SDK's bundled D1000 pinhole intrinsics and extrinsics, scaled to the active UVC image size. It is good enough for live visualization, but camera-specific stereo calibration is required for measurements.
 
 For calibrated depth, pass your own values:
 

@@ -1,4 +1,4 @@
-"""Basic launch for the MYNT EYE S1030 camera node."""
+"""Basic launch for the MYNT EYE D1000 camera node."""
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration

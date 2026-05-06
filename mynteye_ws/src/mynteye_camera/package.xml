@@ -3,7 +3,7 @@
 <package format="3">
   <name>mynteye_camera</name>
   <version>0.1.0</version>
-  <description>ROS 2 Jazzy driver for MYNT EYE S1030/D1000 stereo IR, depth, disparity, IMU and point cloud streams.</description>
+  <description>ROS 2 Jazzy driver for MYNT EYE D1000 stereo IR, depth, disparity, IMU and point cloud streams. S1030-IR support planned.</description>
   <maintainer email="antoniocanetebaena1234@gmail.com">mapir</maintainer>
   <license>Apache-2.0</license>
 

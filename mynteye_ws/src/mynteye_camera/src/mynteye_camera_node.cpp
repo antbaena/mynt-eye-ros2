@@ -1,5 +1,6 @@
 // Copyright 2026
-// ROS 2 Jazzy wrapper for the MYNT EYE S1030/D1000 camera.
+// ROS 2 Jazzy wrapper for the MYNT EYE D1000 camera.
+// S1030-IR support is planned (likely same PID; unconfirmed).
 //
 // Subscribes (via SDK callbacks) to:
 //   - LEFT  / RIGHT mono images
@@ -1206,7 +1207,7 @@ private:
     header.stamp = TimestampToRosTime(data.img ? data.img->timestamp : 0);
     header.frame_id = left ? frame_id_left_ : frame_id_right_;
 
-    // S1030 IR is mono8 (one channel).
+    // D1000 IR is mono8 (one channel).
     std::string encoding = (data.frame.channels() == 1) ? "mono8" : "bgr8";
 
     auto msg = cv_bridge::CvImage(header, encoding, data.frame).toImageMsg();

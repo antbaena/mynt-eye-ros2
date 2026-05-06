@@ -1,6 +1,6 @@
-# MYNT EYE S1030 ROS 2 Jazzy
+# MYNT EYE D1000 ROS 2 Jazzy
 
-ROS 2 Jazzy driver/wrapper for the legacy MYNT EYE S1030/D1000 stereo IR depth camera on Ubuntu 24.04.
+ROS 2 Jazzy driver/wrapper for the MYNT EYE D1000 stereo IR depth camera on Ubuntu 24.04. S1030-IR support is planned.
 
 This project keeps the old MYNT-EYE-S-SDK usable on modern systems, then exposes the camera through a native ROS 2 node with stereo images, rectified images, disparity, depth, point cloud, TF, and optional SDK IMU support.
 

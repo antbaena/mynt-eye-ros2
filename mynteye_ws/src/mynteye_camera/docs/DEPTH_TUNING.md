@@ -1,6 +1,6 @@
 # Depth Tuning
 
-The MYNT EYE S1030 is an active IR stereo camera. Its official SDK does not try to publish a dense depth map everywhere: it computes disparity, rejects weak matches, and publishes invalid depth as zero in a `16UC1` image. This ROS 2 node publishes `16UC1` depth by default too, but uses a balanced SGBM preset so the live RViz view does not collapse into only a few valid patches.
+The MYNT EYE D1000 is an active IR stereo camera. Its official SDK does not try to publish a dense depth map everywhere: it computes disparity, rejects weak matches, and publishes invalid depth as zero in a `16UC1` image. This ROS 2 node publishes `16UC1` depth by default too, but uses a balanced SGBM preset so the live RViz view does not collapse into only a few valid patches.
 
 ## Defaults Chosen From The Official SDK
 
