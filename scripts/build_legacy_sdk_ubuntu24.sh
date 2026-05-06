@@ -69,13 +69,15 @@ replace_once(
     "#define MYNTEYE_PID 0x00F9\n",
     "#define MYNTEYE_PID 0x00F9\n\n"
     "#define MYNTEYE_VID_CUBETERNET 0x1E4E\n"
-    "#define MYNTEYE_PID_D1000 0x0120  // D1000 tested; S1030-IR PID TBD\n",
+    "#define MYNTEYE_PID_D1000 0x0120  // D1000 (USB 1e4e:0120)\n"
+    "#define MYNTEYE_PID_S1030 0x4722  // S1030-IR (USB 04b4:4722)\n",
 )
 replace_once(
     "src/mynteye/device/context.cc",
     "MYNTEYE_BEGIN_NAMESPACE\n\nContext::Context()",
     "MYNTEYE_BEGIN_NAMESPACE\n\nnamespace {\n\n"
     "bool is_mynteye_device(int vid, int pid) {\n"
+    "  // MYNTEYE_VID (0x04B4, Cypress) already covers S1030-IR (04b4:4722).\n"
     "  return (vid == MYNTEYE_VID) ||\n"
     "      (vid == MYNTEYE_VID_CUBETERNET && pid == MYNTEYE_PID_D1000);\n"
     "}\n\n"

@@ -367,6 +367,28 @@ private:
       return;
     }
 
+    if (calibration_preset_ == "sdk_s1030_default" ||
+        (calibration_preset_ == "sdk_default" && image_width == 376 && image_height == 480))
+    {
+      // MYNT EYE S1030-IR: per-eye 376x480 in 752x480 YUYV stereo stream.
+      // Representative intrinsics from MYNT EYE S-SDK STANDARD model defaults.
+      // Replace with unit-specific calibration for accurate depth measurements.
+      constexpr double kS1030Width  = 376.0;
+      constexpr double kS1030Height = 480.0;
+      const double scale_x = static_cast<double>(image_width)  / kS1030Width;
+      const double scale_y = static_cast<double>(image_height) / kS1030Height;
+      *k1 = (cv::Mat_<double>(3, 3) <<
+        179.35 * scale_x, 0.0, 186.17 * scale_x,
+        0.0, 179.35 * scale_y, 239.37 * scale_y,
+        0.0, 0.0, 1.0);
+      *k2 = k1->clone();
+      *d1 = (cv::Mat_<double>(1, 5) << -0.17, 0.028, 0.0, 0.0, 0.0);
+      *d2 = d1->clone();
+      *rotation = cv::Mat::eye(3, 3, CV_64F);
+      *translation = (cv::Mat_<double>(3, 1) << -baseline_m_, 0.0, 0.0);
+      return;
+    }
+
     const double fx = FocalXFor(image_width);
     const double fy = FocalYFor(image_width);
     const double cx = CenterXFor(image_width);
@@ -391,6 +413,12 @@ private:
     }
 
     cv::Mat k1, d1, k2, d2, rotation, translation;
+    if (calibration_preset_ == "sdk_default" && image_width == 376 && image_height == 480) {
+      RCLCPP_INFO_ONCE(get_logger(),
+        "Auto-detected S1030-IR stereo frame (376x480 per eye). "
+        "Using sdk_s1030_default calibration. "
+        "Pass calibration_preset:=sdk_s1030_default to silence this message.");
+    }
     BuildStereoCalibration(image_width, image_height, &k1, &d1, &k2, &d2,
                            &rotation, &translation);
 
@@ -608,7 +636,8 @@ private:
 
     if (!saw_device) {
       RCLCPP_ERROR(get_logger(),
-                   "No MYNT EYE V4L2 node found. Confirm that lsusb shows 1e4e:0120 "
+                   "No MYNT EYE V4L2 node found. Confirm lsusb shows "
+                   "1e4e:0120 (D1000) or 04b4:4722 (S1030-IR) "
                    "and that /dev/video* nodes exist before launching ROS.");
     } else {
       RCLCPP_ERROR(get_logger(), "MYNT EYE V4L2 nodes appeared, but none produced frames");
