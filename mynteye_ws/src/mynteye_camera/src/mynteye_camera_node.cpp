@@ -367,24 +367,53 @@ private:
       return;
     }
 
+    // sdk_eeprom: use unit-specific calibration read from the camera EEPROM at startup
+    if (calibration_preset_ == "sdk_eeprom" && eeprom_calib_loaded_) {
+      const double sx = (ec_ref_width_  > 0) ? static_cast<double>(image_width)  / ec_ref_width_  : 1.0;
+      const double sy = (ec_ref_height_ > 0) ? static_cast<double>(image_height) / ec_ref_height_ : 1.0;
+      *k1 = (cv::Mat_<double>(3, 3) <<
+        ec_lft_fx_ * sx, 0.0, ec_lft_cx_ * sx,
+        0.0, ec_lft_fy_ * sy, ec_lft_cy_ * sy,
+        0.0, 0.0, 1.0);
+      *k2 = (cv::Mat_<double>(3, 3) <<
+        ec_rgt_fx_ * sx, 0.0, ec_rgt_cx_ * sx,
+        0.0, ec_rgt_fy_ * sy, ec_rgt_cy_ * sy,
+        0.0, 0.0, 1.0);
+      *d1 = (cv::Mat_<double>(1, 5) <<
+        ec_lft_k1_, ec_lft_k2_, ec_lft_p1_, ec_lft_p2_, ec_lft_k3_);
+      *d2 = (cv::Mat_<double>(1, 5) <<
+        ec_rgt_k1_, ec_rgt_k2_, ec_rgt_p1_, ec_rgt_p2_, ec_rgt_k3_);
+      *rotation    = ec_rotation_.clone();
+      *translation = ec_translation_.clone();
+      return;
+    }
+
     if (calibration_preset_ == "sdk_s1030_default" ||
-        (calibration_preset_ == "sdk_default" && image_width == 376 && image_height == 480))
+        calibration_preset_ == "sdk_eeprom" ||       // sdk_eeprom fallback when EEPROM not loaded
+        (calibration_preset_ == "sdk_default" && image_width == 752 && image_height == 480))
     {
-      // MYNT EYE S1030-IR: per-eye 376x480 in 752x480 YUYV stereo stream.
-      // Representative intrinsics from MYNT EYE S-SDK STANDARD model defaults.
-      // Replace with unit-specific calibration for accurate depth measurements.
-      constexpr double kS1030Width  = 376.0;
+      if (calibration_preset_ == "sdk_eeprom") {
+        RCLCPP_WARN_ONCE(get_logger(),
+          "sdk_eeprom calibration not loaded; falling back to sdk_s1030_default hardcoded values");
+      }
+      // MYNT EYE S1030-IR: 752x480 per-eye images produced by interleaved YUYV extraction.
+      // Reference intrinsics from S1030-IR EEPROM (SN 4B4D2D2A00090712); scale to actual size.
+      // For accurate depth on your specific unit, use calibration_preset:=sdk_eeprom.
+      constexpr double kS1030Width  = 752.0;
       constexpr double kS1030Height = 480.0;
       const double scale_x = static_cast<double>(image_width)  / kS1030Width;
       const double scale_y = static_cast<double>(image_height) / kS1030Height;
       *k1 = (cv::Mat_<double>(3, 3) <<
-        179.35 * scale_x, 0.0, 186.17 * scale_x,
-        0.0, 179.35 * scale_y, 239.37 * scale_y,
+        355.41046457 * scale_x, 0.0, 379.13236696 * scale_x,
+        0.0, 356.80101729 * scale_y, 245.83771873 * scale_y,
         0.0, 0.0, 1.0);
-      *k2 = k1->clone();
-      *d1 = (cv::Mat_<double>(1, 5) << -0.17, 0.028, 0.0, 0.0, 0.0);
-      *d2 = d1->clone();
-      *rotation = cv::Mat::eye(3, 3, CV_64F);
+      *k2 = (cv::Mat_<double>(3, 3) <<
+        358.86257326 * scale_x, 0.0, 371.82281530 * scale_x,
+        0.0, 358.84288724 * scale_y, 233.52034161 * scale_y,
+        0.0, 0.0, 1.0);
+      *d1 = (cv::Mat_<double>(1, 5) << -0.24697498, 0.04277975, -0.00080618,  0.00060885, 0.0);
+      *d2 = (cv::Mat_<double>(1, 5) << -0.26318422, 0.04941322, -0.00063506, -0.00073025, 0.0);
+      *rotation    = cv::Mat::eye(3, 3, CV_64F);
       *translation = (cv::Mat_<double>(3, 1) << -baseline_m_, 0.0, 0.0);
       return;
     }
@@ -413,11 +442,11 @@ private:
     }
 
     cv::Mat k1, d1, k2, d2, rotation, translation;
-    if (calibration_preset_ == "sdk_default" && image_width == 376 && image_height == 480) {
+    if (calibration_preset_ == "sdk_default" && image_width == 752 && image_height == 480) {
       RCLCPP_INFO_ONCE(get_logger(),
-        "Auto-detected S1030-IR stereo frame (376x480 per eye). "
+        "Auto-detected S1030-IR stereo frame (752x480 per eye). "
         "Using sdk_s1030_default calibration. "
-        "Pass calibration_preset:=sdk_s1030_default to silence this message.");
+        "Pass calibration_preset:=sdk_eeprom for unit-specific calibration.");
     }
     BuildStereoCalibration(image_width, image_height, &k1, &d1, &k2, &d2,
                            &rotation, &translation);
@@ -493,8 +522,73 @@ private:
     }
   }
 
+  bool LoadEepromCalibration()
+  {
+    RCLCPP_INFO(get_logger(), "Reading EEPROM calibration from S-SDK...");
+    // Create a temporary API session just to read calibration (no Start() call).
+    static char arg0[] = "mynteye";
+    static char *sdkargv[] = {arg0, nullptr};
+    int sdkargc = 1;
+    auto tmp_api = API::Create(sdkargc, sdkargv);
+    if (!tmp_api) {
+      RCLCPP_WARN(get_logger(),
+                  "sdk_eeprom: could not open S-SDK; using sdk_s1030_default calibration");
+      return false;
+    }
+
+    const auto li = tmp_api->GetIntrinsics<IntrinsicsPinhole>(Stream::LEFT);
+    const auto ri = tmp_api->GetIntrinsics<IntrinsicsPinhole>(Stream::RIGHT);
+    // GetExtrinsics(RIGHT, LEFT) yields translation sign matching the sdk_default convention
+    const auto ex = tmp_api->GetExtrinsics(Stream::RIGHT, Stream::LEFT);
+
+    // S-SDK returns translation in mm; convert to meters
+    double tx = ex.translation[0];
+    double ty = ex.translation[1];
+    double tz = ex.translation[2];
+    if (std::abs(tx) > 1.0 || std::abs(ty) > 1.0 || std::abs(tz) > 1.0) {
+      tx /= 1000.0; ty /= 1000.0; tz /= 1000.0;
+    }
+
+    ec_ref_width_  = li.width;
+    ec_ref_height_ = li.height;
+    ec_lft_fx_ = li.fx;  ec_lft_fy_ = li.fy;
+    ec_lft_cx_ = li.cx;  ec_lft_cy_ = li.cy;
+    ec_lft_k1_ = li.coeffs[0]; ec_lft_k2_ = li.coeffs[1];
+    ec_lft_p1_ = li.coeffs[2]; ec_lft_p2_ = li.coeffs[3];
+    ec_lft_k3_ = li.coeffs[4];
+    ec_rgt_fx_ = ri.fx;  ec_rgt_fy_ = ri.fy;
+    ec_rgt_cx_ = ri.cx;  ec_rgt_cy_ = ri.cy;
+    ec_rgt_k1_ = ri.coeffs[0]; ec_rgt_k2_ = ri.coeffs[1];
+    ec_rgt_p1_ = ri.coeffs[2]; ec_rgt_p2_ = ri.coeffs[3];
+    ec_rgt_k3_ = ri.coeffs[4];
+
+    ec_rotation_ = (cv::Mat_<double>(3, 3) <<
+      ex.rotation[0][0], ex.rotation[0][1], ex.rotation[0][2],
+      ex.rotation[1][0], ex.rotation[1][1], ex.rotation[1][2],
+      ex.rotation[2][0], ex.rotation[2][1], ex.rotation[2][2]);
+    ec_translation_ = (cv::Mat_<double>(3, 1) << tx, ty, tz);
+
+    // Update the working baseline with the measured value
+    baseline_m_ = std::abs(tx);
+
+    eeprom_calib_loaded_ = true;
+    RCLCPP_INFO(get_logger(),
+                "EEPROM calib loaded (ref %dx%d): "
+                "left fx=%.2f fy=%.2f cx=%.2f cy=%.2f | "
+                "right fx=%.2f fy=%.2f cx=%.2f cy=%.2f | "
+                "baseline=%.4f m",
+                ec_ref_width_, ec_ref_height_,
+                ec_lft_fx_, ec_lft_fy_, ec_lft_cx_, ec_lft_cy_,
+                ec_rgt_fx_, ec_rgt_fy_, ec_rgt_cx_, ec_rgt_cy_,
+                baseline_m_);
+    return true;
+  }
+
   bool OpenCamera()
   {
+    if (calibration_preset_ == "sdk_eeprom") {
+      LoadEepromCalibration();  // best-effort; falls back to sdk_s1030_default on failure
+    }
     if (backend_ == "sdk") {
       return OpenSdkCamera();
     }
@@ -1298,6 +1392,15 @@ private:
   double rectified_cx_ = 0.0;
   double rectified_cy_ = 0.0;
   double rectified_baseline_m_ = 0.0;
+  // EEPROM calibration loaded via S-SDK (sdk_eeprom preset)
+  bool eeprom_calib_loaded_{false};
+  double ec_lft_fx_{0}, ec_lft_fy_{0}, ec_lft_cx_{0}, ec_lft_cy_{0};
+  double ec_lft_k1_{0}, ec_lft_k2_{0}, ec_lft_p1_{0}, ec_lft_p2_{0}, ec_lft_k3_{0};
+  double ec_rgt_fx_{0}, ec_rgt_fy_{0}, ec_rgt_cx_{0}, ec_rgt_cy_{0};
+  double ec_rgt_k1_{0}, ec_rgt_k2_{0}, ec_rgt_p1_{0}, ec_rgt_p2_{0}, ec_rgt_k3_{0};
+  cv::Mat ec_rotation_;    // 3x3 rotation matrix for stereoRectify
+  cv::Mat ec_translation_; // 3x1 translation vector in meters
+  int ec_ref_width_{0}, ec_ref_height_{0};
   int width_;
   int height_;
   int fps_;
