@@ -159,8 +159,9 @@ private:
       throw std::runtime_error("Camera open reported success but IsOpened() is false");
     }
 
-    RCLCPP_INFO(get_logger(), "Camera opened. left=%s depth=%s",
+    RCLCPP_INFO(get_logger(), "Camera opened. left=%s right=%s depth=%s",
       cam_.IsStreamDataEnabled(ImageType::IMAGE_LEFT_COLOR) ? "yes" : "no",
+      cam_.IsStreamDataEnabled(ImageType::IMAGE_RIGHT_COLOR) ? "yes" : "no",
       cam_.IsStreamDataEnabled(ImageType::IMAGE_DEPTH) ? "yes" : "no");
 
     // Calibration
@@ -358,14 +359,22 @@ private:
   // --------------------------------------------------------------------------
   void PublishTF()
   {
-    // Extract baseline from extrinsics (translation[0] is typically -baseline)
-    double baseline = 0.12002;  // 120mm default
+    // Extract baseline from extrinsics (translation[0] is typically -baseline_m).
+    // Some D-SDK versions return translation in mm (e.g. -120.0) instead of meters.
+    double baseline = 0.12002;  // 120 mm default
     if (calib_ok_) {
-      baseline = std::abs(extrinsics_.translation[0]);
-      if (baseline < 0.05 || baseline > 0.3) {
-        baseline = 0.12002;  // fallback
+      double raw = std::abs(extrinsics_.translation[0]);
+      // Heuristic: if |translation| > 1.0 the unit is mm, convert to meters.
+      if (raw > 1.0) {
+        RCLCPP_INFO(get_logger(),
+          "SDK extrinsics translation looks like mm (%.1f); converting to meters.", raw);
+        raw /= 1000.0;
+      }
+      if (raw < 0.05 || raw > 0.3) {
         RCLCPP_WARN(get_logger(),
-          "SDK baseline out of range (%.4f m), using 0.12002 m", baseline);
+          "SDK baseline out of range (%.4f m), falling back to 0.12002 m", raw);
+      } else {
+        baseline = raw;
       }
     }
 
